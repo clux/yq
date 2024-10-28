@@ -1,6 +1,6 @@
 [package]
 name = "lq"
-description = "yet another jq wrapper"
+description = "low overhead yq/tq/... implementation"
 authors = [
     "clux <sszynrae@gmail.com>",
 ]
@@ -16,7 +16,7 @@ categories = ["command-line-utilities", "parsing"]
 [[bin]]
 doc = false
 name = "lq"
-path = "yq.rs"
+path = "lq.rs"
 
 [dependencies]
 anyhow = "1.0.81"
@@ -36,5 +36,5 @@ debug = 0
 #strip = "symbols"
 
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/{ version }/yq-{ target }{ archive-suffix }"
-bin-dir = "yq-{ target }/{ bin }{ format }"
+pkg-url = "{ repo }/releases/download/{ version }/lq-{ target }{ archive-suffix }"
+bin-dir = "lq-{ target }/{ bin }{ format }"
