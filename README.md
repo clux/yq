@@ -1,4 +1,4 @@
-# lq - low overhead yq implementation
+# lq - low overhead yq/tq/... implementation
 [![CI](https://github.com/clux/lq/actions/workflows/release.yml/badge.svg)](https://github.com/clux/lq/actions/workflows/release.yml)
 [![Crates.io](https://img.shields.io/crates/v/lq.svg)](https://crates.io/crates/lq)
 [![dependency status](https://deps.rs/repo/github/clux/lq/status.svg)](https://deps.rs/repo/github/clux/lq)
@@ -73,7 +73,7 @@ $ lq -y '.[3].metadata' test/deploy.yaml
 
 The default input format is YAML and is what the binary is named for (and the most common primary usage case).
 
-If you want to use it as the top level `yq` executable you can `alias yq=lq`. This should be compatible with `python-yq`, but have some differences with the go yq.
+If you want to use it as the top level `yq` executable you can `alias yq=lq`. This should be compatible with `python-yq`, but it has some differences with the go yq.
 
 ### TOML Input
 
