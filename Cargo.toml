@@ -1,5 +1,5 @@
 [package]
-name = "whyq"
+name = "lq"
 description = "yet another jq wrapper"
 authors = [
     "clux <sszynrae@gmail.com>",
@@ -7,7 +7,7 @@ authors = [
 version = "0.11.1"
 license = "Apache-2.0"
 readme = "./README.md"
-repository = "https://github.com/clux/whyq"
+repository = "https://github.com/clux/lq"
 edition = "2021"
 rust-version = "1.76.0"
 categories = ["command-line-utilities", "parsing"]
@@ -15,7 +15,7 @@ categories = ["command-line-utilities", "parsing"]
 
 [[bin]]
 doc = false
-name = "whyq"
+name = "lq"
 path = "yq.rs"
 
 [dependencies]

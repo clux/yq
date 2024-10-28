@@ -119,9 +119,9 @@ jobs:
           set -euxo pipefail
           ext=""
           [[ "${{ matrix.name }}" == windows-* ]] && ext=".exe"
-          bin="target/${{ matrix.target }}/release/whyq${ext}"
+          bin="target/${{ matrix.target }}/release/lq${ext}"
           strip "$bin" || true
-          dst="whyq-${{ matrix.target }}"
+          dst="lq-${{ matrix.target }}"
           mkdir "$dst"
           cp "$bin" "$dst/"
 
@@ -130,14 +130,14 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          dst="whyq-${{ matrix.target }}"
+          dst="lq-${{ matrix.target }}"
           tar cavf "$dst.tar.xz" "$dst"
       - name: Archive (zip)
         if: startsWith(matrix.name, 'windows-')
         shell: bash
         run: |
           set -euxo pipefail
-          dst="whyq-${{ matrix.target }}"
+          dst="lq-${{ matrix.target }}"
           7z a "$dst.zip" "$dst"
 
       - uses: actions/upload-artifact@v4
@@ -145,8 +145,8 @@ jobs:
           name: builds-${{ matrix.target }}
           retention-days: 1
           path: |
-            whyq-*.tar.xz
-            whyq-*.zip
+            lq-*.tar.xz
+            lq-*.zip
 
   sign:
     needs: build
@@ -170,7 +170,7 @@ jobs:
           merge-multiple: true
 
       - name: Checksums with SHA512
-        run: sha512sum whyq-* | tee SHA512SUMS
+        run: sha512sum lq-* | tee SHA512SUMS
 
       - uses: softprops/action-gh-release@v2
         env:
@@ -179,6 +179,6 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            whyq-*.tar.xz
-            whyq-*.zip
+            lq-*.tar.xz
+            lq-*.zip
             *SUMS*

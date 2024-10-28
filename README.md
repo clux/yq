@@ -1,7 +1,7 @@
-# whyq - low overhead yq implementation
-[![CI](https://github.com/clux/whyq/actions/workflows/release.yml/badge.svg)](https://github.com/clux/whyq/actions/workflows/release.yml)
-[![Crates.io](https://img.shields.io/crates/v/whyq.svg)](https://crates.io/crates/whyq)
-[![dependency status](https://deps.rs/repo/github/clux/whyq/status.svg)](https://deps.rs/repo/github/clux/whyq)
+# lq - low overhead yq implementation
+[![CI](https://github.com/clux/lq/actions/workflows/release.yml/badge.svg)](https://github.com/clux/lq/actions/workflows/release.yml)
+[![Crates.io](https://img.shields.io/crates/v/lq.svg)](https://crates.io/crates/lq)
+[![dependency status](https://deps.rs/repo/github/clux/lq/status.svg)](https://deps.rs/repo/github/clux/lq)
 
 A lightweight and portable [jq](https://jqlang.github.io/jq/) wrapper for doing arbitrary queries from **YAML**/**TOML**/**JSON** documents by converting to **JSON** and passing to `jq`, then returning the result either as raw `jq` output, or back into TOML or YAML.
 
@@ -10,13 +10,13 @@ A lightweight and portable [jq](https://jqlang.github.io/jq/) wrapper for doing 
 Via cargo:
 
 ```sh
-cargo install whyq
+cargo install lq
 ```
 
-or download a prebuilt from [releases](https://github.com/clux/whyq/releases) either manually, or via [binstall](https://github.com/cargo-bins/cargo-binstall):
+or download a prebuilt from [releases](https://github.com/clux/lq/releases) either manually, or via [binstall](https://github.com/cargo-bins/cargo-binstall):
 
 ```sh
-cargo binstall whyq
+cargo binstall lq
 ```
 
 **Note**: Depends on `jq` being installed.
@@ -36,15 +36,15 @@ cargo binstall whyq
 - reads __multidoc yaml__ input, handles [yaml merge keys](https://yaml.org/type/merge.html) (expanding tags)
 - reads from __stdin xor file__ (file if last arg is a file)
 - output conversion shortcuts: `-y` (YAML) or `-t` (TOML)
-- drop-in replacement to [python-yq](https://kislyuk.github.io/yq/) (with `alias yq=whyq`)
-- ~[1MB](https://github.com/clux/whyq/releases/latest) in binary size (for small cloud CI images / [binstalled ci actions](https://github.com/cargo-bins/cargo-binstall#faq))
+- drop-in replacement to [python-yq](https://kislyuk.github.io/yq/) (with `alias yq=lq`)
+- ~[1MB](https://github.com/clux/lq/releases/latest) in binary size (for small cloud CI images / [binstalled ci actions](https://github.com/cargo-bins/cargo-binstall#faq))
 
 ### Limitations
 
 - Shells out to `jq` (supports what your `jq` version supports)
-- Expands [YAML tags](https://yaml.org/spec/1.2-old/spec.html#id2764295) (input is [singleton mapped](https://docs.rs/serde_yaml/latest/serde_yaml/with/singleton_map/index.html) -> [recursively](https://docs.rs/serde_yaml/latest/serde_yaml/with/singleton_map_recursive/index.html), then [merged](https://docs.rs/serde_yaml/latest/serde_yaml/value/enum.Value.html#method.apply_merge)) - so tags are [not preserved](https://github.com/clux/whyq/issues/12) in the output
+- Expands [YAML tags](https://yaml.org/spec/1.2-old/spec.html#id2764295) (input is [singleton mapped](https://docs.rs/serde_yaml/latest/serde_yaml/with/singleton_map/index.html) -> [recursively](https://docs.rs/serde_yaml/latest/serde_yaml/with/singleton_map_recursive/index.html), then [merged](https://docs.rs/serde_yaml/latest/serde_yaml/value/enum.Value.html#method.apply_merge)) - so tags are [not preserved](https://github.com/clux/lq/issues/12) in the output
 - Does not preserve indentation (unsupported in [serde_yaml](https://github.com/dtolnay/serde-yaml/issues/337))
-- Does not support [duplicate keys](https://github.com/clux/whyq/issues/14) in the input document
+- Does not support [duplicate keys](https://github.com/clux/lq/issues/14) in the input document
 - No XML/CSV support (or other more exotic formats)
 
 ## Usage
@@ -54,10 +54,10 @@ cargo binstall whyq
 Use as [jq](https://jqlang.github.io/jq/tutorial/) either via stdin:
 
 ```sh
-$ whyq '.[3].kind' -r < test/deploy.yaml
+$ lq '.[3].kind' -r < test/deploy.yaml
 Service
 
-$ whyq -y '.[3].metadata' < test/deploy.yaml
+$ lq -y '.[3].metadata' < test/deploy.yaml
 labels:
   app: controller
 name: controller
@@ -67,17 +67,17 @@ namespace: default
 or from a file arg (at the end):
 
 ```sh
-$ whyq '.[3].kind' -r test/deploy.yaml
-$ whyq -y '.[3].metadata' test/deploy.yaml
+$ lq '.[3].kind' -r test/deploy.yaml
+$ lq -y '.[3].metadata' test/deploy.yaml
 ```
 
 The default input format is YAML and is what the binary is named for (and the most common primary usage case).
 
-If you want to use it as the top level `yq` executable you can `alias yq=whyq`. This should be compatible with `python-yq`, but have some differences with the go yq.
+If you want to use it as the top level `yq` executable you can `alias yq=lq`. This should be compatible with `python-yq`, but have some differences with the go yq.
 
 ### TOML Input
 
-Using say `Cargo.toml` from this repo as input, and aliasing `tq='whyq --input=toml'`:
+Using say `Cargo.toml` from this repo as input, and aliasing `tq='lq --input=toml'`:
 
 ```sh
 $ tq '.package.categories[]' -r < Cargo.toml
@@ -99,14 +99,14 @@ $ tq '.profile' -c < Cargo.toml
 {"release":{"lto":true,"panic":"abort","strip":"symbols"}}
 ```
 
-Add `alias tq='whyq --input=toml'` to your `.bashrc` or `.zshrc` (etc) to make this permanent if you find it useful.
+Add `alias tq='lq --input=toml'` to your `.bashrc` or `.zshrc` (etc) to make this permanent if you find it useful.
 
 ### JSON Input
 
 If you need to convert json to another format you pass `--input=json`:
 
 ```sh
-$ whyq --input=json '.ingredients | keys' -y < test/guacamole.json
+$ lq --input=json '.ingredients | keys' -y < test/guacamole.json
 - avocado
 - coriander
 - cumin
@@ -122,7 +122,7 @@ $ whyq --input=json '.ingredients | keys' -y < test/guacamole.json
 Select with nested query and raw output:
 
 ```sh
-$ whyq '.spec.template.spec.containers[].image' -r < test/grafana.yaml
+$ lq '.spec.template.spec.containers[].image' -r < test/grafana.yaml
 quay.io/kiwigrid/k8s-sidecar:1.24.6
 quay.io/kiwigrid/k8s-sidecar:1.24.6
 docker.io/grafana/grafana:10.1.0
@@ -131,20 +131,20 @@ docker.io/grafana/grafana:10.1.0
 Select on multidoc:
 
 ```sh
-$ whyq -y '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].ports[0].containerPort' test/deploy.yaml
+$ lq -y '.[] | select(.kind == "Deployment") | .spec.template.spec.containers[0].ports[0].containerPort' test/deploy.yaml
 8000
 ```
 
 Escaping keys with slashes etc in them:
 
 ```sh
-whyq -y '.updates[] | select(.["package-ecosystem"] == "cargo") | .groups' .github/dependabot.yml
+lq -y '.updates[] | select(.["package-ecosystem"] == "cargo") | .groups' .github/dependabot.yml
 ```
 
-Using helpers from `jq` [modules](https://jqlang.github.io/jq/manual/#modules) e.g. [k.jq](https://github.com/clux/whyq/blob/main/test/modules/k.jq):
+Using helpers from `jq` [modules](https://jqlang.github.io/jq/manual/#modules) e.g. [k.jq](https://github.com/clux/lq/blob/main/test/modules/k.jq):
 
 ```sh
-$ whyq 'include "k"; .[] | gvk' -r -L$PWD/test/modules < test/deploy.yaml
+$ lq 'include "k"; .[] | gvk' -r -L$PWD/test/modules < test/deploy.yaml
 v1.ServiceAccount
 rbac.authorization.k8s.io/v1.ClusterRole
 rbac.authorization.k8s.io/v1.ClusterRoleBinding
@@ -162,10 +162,10 @@ If you pass on `-r`,`-c` or `-c` for raw/compact output, then this will generall
 The project respects `RUST_LOG` when set, and sends these diagnostic logs to stderr:
 
 ```sh
-$ RUST_LOG=debug whyq '.version' test/circle.yml
+$ RUST_LOG=debug lq '.version' test/circle.yml
 2023-09-18T23:17:04.533055Z DEBUG yq: args: Args { input: Yaml, output: Jq, yaml_output: false, toml_output: false, in_place: false, jq_query: ".version", file: Some("test/circle.yml"), compact_output: false, raw_output: false, join_output: false, modules: None }
 2023-09-18T23:17:04.533531Z DEBUG yq: found 1 documents
-2023-09-18T23:17:04.533563Z DEBUG yq: input decoded as json: {"definitions":{"filters":{"on_every_commit":{"tags":{"only":"/.*/"}},"on_tag":{"branches":{"ignore":"/.*/"},"tags":{"only":"/v[0-9]+(\\.[0-9]+)*/"}}},"steps":[{"step":{"command":"chmod a+w . && cargo build --release","name":"Build binary"}},{"step":{"command":"rustc --version; cargo --version; rustup --version","name":"Version information"}}]},"jobs":{"build":{"docker":[{"image":"clux/muslrust:stable"}],"environment":{"IMAGE_NAME":"whyq"},"resource_class":"xlarge","steps":["checkout",{"run":{"command":"rustc --version; cargo --version; rustup --version","name":"Version information"}},{"run":{"command":"chmod a+w . && cargo build --release","name":"Build binary"}},{"run":"echo versions"}]},"release":{"docker":[{"image":"clux/muslrust:stable"}],"resource_class":"xlarge","steps":["checkout",{"run":{"command":"rustc --version; cargo --version; rustup --version","name":"Version information"}},{"run":{"command":"chmod a+w . && cargo build --release","name":"Build binary"}},{"upload":{"arch":"x86_64-unknown-linux-musl","binary_name":"${IMAGE_NAME}","source":"target/x86_64-unknown-linux-musl/release/${IMAGE_NAME}","version":"${CIRCLE_TAG}"}}]}},"version":2.1,"workflows":{"my_flow":{"jobs":[{"build":{"filters":{"tags":{"only":"/.*/"}}}},{"release":{"filters":{"branches":{"ignore":"/.*/"},"tags":{"only":"/v[0-9]+(\\.[0-9]+)*/"}}}}]},"version":2}}
+2023-09-18T23:17:04.533563Z DEBUG yq: input decoded as json: {"definitions":{"filters":{"on_every_commit":{"tags":{"only":"/.*/"}},"on_tag":{"branches":{"ignore":"/.*/"},"tags":{"only":"/v[0-9]+(\\.[0-9]+)*/"}}},"steps":[{"step":{"command":"chmod a+w . && cargo build --release","name":"Build binary"}},{"step":{"command":"rustc --version; cargo --version; rustup --version","name":"Version information"}}]},"jobs":{"build":{"docker":[{"image":"clux/muslrust:stable"}],"environment":{"IMAGE_NAME":"lq"},"resource_class":"xlarge","steps":["checkout",{"run":{"command":"rustc --version; cargo --version; rustup --version","name":"Version information"}},{"run":{"command":"chmod a+w . && cargo build --release","name":"Build binary"}},{"run":"echo versions"}]},"release":{"docker":[{"image":"clux/muslrust:stable"}],"resource_class":"xlarge","steps":["checkout",{"run":{"command":"rustc --version; cargo --version; rustup --version","name":"Version information"}},{"run":{"command":"chmod a+w . && cargo build --release","name":"Build binary"}},{"upload":{"arch":"x86_64-unknown-linux-musl","binary_name":"${IMAGE_NAME}","source":"target/x86_64-unknown-linux-musl/release/${IMAGE_NAME}","version":"${CIRCLE_TAG}"}}]}},"version":2.1,"workflows":{"my_flow":{"jobs":[{"build":{"filters":{"tags":{"only":"/.*/"}}}},{"release":{"filters":{"branches":{"ignore":"/.*/"},"tags":{"only":"/v[0-9]+(\\.[0-9]+)*/"}}}}]},"version":2}}
 2023-09-18T23:17:04.533650Z DEBUG yq: jq args: [".version"]
 2023-09-18T23:17:04.538606Z DEBUG yq: jq stdout: 2.1
 

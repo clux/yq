@@ -25,7 +25,7 @@ jobs:
       - image: clux/muslrust:stable
     resource_class: xlarge
     environment:
-      IMAGE_NAME: whyq
+      IMAGE_NAME: lq
     steps:
       - checkout
       - run: *versions
