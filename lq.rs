@@ -12,6 +12,7 @@ enum Input {
     Yaml,
     Json,
     Toml,
+    Kdl,
 }
 
 #[derive(Copy, Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -187,6 +188,28 @@ impl Args {
         Ok(serde_json::to_vec(&doc_as)?)
     }
 
+    fn read_kdl(&mut self) -> Result<Vec<u8>> {
+        use kdl::KdlDocument;
+        let mut buf = String::new();
+        let kdl_str = if let Some(f) = &self.file {
+            if !std::path::Path::new(&f).exists() {
+                Self::try_parse_from(["cmd", "-h"])?;
+                std::process::exit(2);
+            }
+            std::fs::read_to_string(f)?
+        } else if !stdin().is_terminal() && !cfg!(test) {
+            debug!("reading from stdin");
+            stdin().read_to_string(&mut buf)?;
+            buf
+        } else {
+            Self::try_parse_from(["cmd", "-h"])?;
+            std::process::exit(2);
+        };
+        let doc: KdlDocument = kdl_str.parse()?;
+        let doc_as: serde_json::Value = doc.try_into()?;
+        Ok(serde_json::to_vec(&doc_as)?)
+    }
+
     fn read_json(&mut self) -> Result<Vec<u8>> {
         let json_value: serde_json::Value = if let Some(f) = &self.file {
             if !std::path::Path::new(&f).exists() {
@@ -209,6 +232,7 @@ impl Args {
         let ser = match self.input {
             Input::Yaml => self.read_yaml()?,
             Input::Toml => self.read_toml()?,
+            Input::Kdl => self.read_kdl()?,
             Input::Json => self.read_json()?,
         };
         debug!("input decoded as json: {}", String::from_utf8_lossy(&ser));
