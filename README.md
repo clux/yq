@@ -73,7 +73,17 @@ $ lq -y '.[3].metadata' test/deploy.yaml
 
 The default input format is YAML and is what the binary is named for (and the most common primary usage case).
 
-If you want to use it as the top level `yq` executable you can `alias yq=lq`. This should be compatible with `python-yq`, but it has some differences with the go yq.
+If you want to use it as the top level `yq` executable you can either symlink or alias:
+
+```sh
+# globally make yq be lq
+ln -s $(which lq) /usr/local/bin/yq
+
+# alias yq to lq in shell environment only
+alias yq=lq
+```
+
+This should be compatible with `python-yq`, but it has some differences with the go yq.
 
 ### TOML Input
 
