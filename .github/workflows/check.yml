@@ -79,9 +79,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-      - name: Configure toolchain
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update --target ${{ matrix.target }}
-          rustup default stable
-      - name: Check
-        run: cargo check --target ${{ matrix.target }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo check --target ${{ matrix.target }}
