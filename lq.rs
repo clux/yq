@@ -68,6 +68,27 @@ struct Args {
     #[arg(short, long, default_value = "false")]
     in_place: bool,
 
+    /// Split the output by keys and serialize into a folder
+    ///
+    /// If set, this query is executed for each document against jq
+    /// to produce a filename to store the resulting document.
+    ///
+    /// This option only produces a key for each filename. The key
+    /// is evaluated against the base document and does not take the jq query
+    /// into consideration.
+    ///
+    /// Example: --split '"./" + (.metadata.name) + "_" + (.kind | ascii_downcase) + ".yaml"'
+    #[arg(
+        short,
+        long,
+        conflicts_with = "in_place",
+        // we need to be able to parse these back into documents to be able to split them
+        conflicts_with = "raw_output",
+        conflicts_with = "compact_output",
+        conflicts_with = "join_output"
+    )]
+    split: Option<String>,
+
     /// Query to be sent to jq (see https://jqlang.github.io/jq/manual/)
     ///
     /// Default "."
@@ -125,6 +146,12 @@ impl Args {
             args.push(format!("{}", dir.display()));
         }
         args
+    }
+    fn jq_split_args(&self) -> Option<Vec<String>> {
+        let split_by = &self.split.as_ref()?;
+        let mut args = vec![];
+        args.push(split_by.to_string());
+        Some(args)
     }
 
     fn read_yaml(&mut self) -> Result<Vec<u8>> {
@@ -216,12 +243,11 @@ impl Args {
     }
 
     /// Pass json encoded bytes to jq with arguments for jq
-    fn shellout(&self, input: Vec<u8>) -> Result<Vec<u8>> {
-        let args = self.jq_args();
+    fn shellout(&self, input: Vec<u8>, args: &[String]) -> Result<Vec<u8>> {
         debug!("jq args: {:?}", &args);
         // shellout jq with given args
         let mut child = Command::new("jq")
-            .args(&args)
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -239,7 +265,7 @@ impl Args {
         Ok(output.stdout)
     }
 
-    // print output either as yaml or json (as per jq output)
+    // Convert stdout into one of the Output formats verbatim as a single string
     fn output(&self, stdout: Vec<u8>) -> Result<String> {
         match self.output {
             // Only jq output is guaranteed to succeed because it's not parsed as a format
@@ -269,6 +295,26 @@ impl Args {
             }
         }
     }
+    // Convert stdout into one of the Output formats verbatim as multidoc strings
+    fn output_matched(&self, stdout: Vec<u8>) -> Result<Vec<String>> {
+        let docs = serde_json::Deserializer::from_slice(&stdout)
+            .into_iter::<serde_json::Value>()
+            .flatten()
+            .collect::<Vec<_>>();
+        debug!("parsed {} documents", docs.len());
+        let mut res = vec![];
+        // All formats are strictly parsed as the requested formats
+        for x in docs.as_slice() {
+            let str_doc: String = match self.output {
+                // We even need jq output to be valid json in this case to allow multidoc to be matched up
+                Output::Jq => serde_json::to_string_pretty(&x)?,
+                Output::Yaml => serde_yaml::to_string(&x)?,
+                Output::Toml => toml::to_string(&x)?,
+            };
+            res.push(str_doc.trim_end().to_string());
+        }
+        Ok(res)
+    }
 }
 
 fn init_env_tracing_stderr() -> Result<()> {
@@ -290,15 +336,43 @@ fn main() -> Result<()> {
     }
     debug!("args: {:?}", args);
     let input = args.read_input()?;
-    let stdout = args.shellout(input)?;
-    let output = args.output(stdout)?;
-    if args.in_place && args.file.is_some() {
-        let f = args.file.unwrap(); // required
-        std::fs::write(f, output + "\n")?;
+    let filenames: Option<Vec<String>> = if let Some(split_args) = &args.jq_split_args() {
+        // Evaluate each document with the split expression against jq
+        // Later on, we match up the array of filenames with the corresponding output
+        let keys = args.shellout(input.clone(), split_args)?; // TODO: do we need to split input for the split arg key?
+        let split = String::from_utf8_lossy(&keys);
+        Some(split.lines().map(String::from).collect())
     } else {
-        // write result to stdout ignoring SIGPIPE errors
-        // https://github.com/rust-lang/rust/issues/46016
-        let _ = writeln!(std::io::stdout(), "{output}");
+        None // TODO: avoid with and .and above
+    };
+    todo!();
+    // TODO: need to evaluate assumption on how we multidoc feed to jq
+    // it seems it balks in jq shellout above on deploy.yaml (when parsed into jq first).. should it?
+    // are we doing multidoc wrapping that does not make sense for it?
+    // ..PROBABLY the problem is that the key expects a document.. but we feed the shellout the full input
+    // ..thus the key does not have the .[] indexer..
+    // UGH YEP> we need to split at the READ SIDE. but this makes everything easier after.
+    let stdout = args.shellout(input, &args.jq_args())?;
+    if let Some(files) = filenames {
+        // Strict multidoc output with multidoc filename splitting
+        println!("found filenames: {files:?}");
+        // TODO: we need to split output here and write each output entry to a file
+        let output = args.output_matched(stdout)?;
+        for (filename, doc) in std::iter::zip(files, output) {
+            let firstlines = unsafe { doc.get_unchecked(0..200) };
+            println!("would write to {filename}:\n {firstlines}");
+        }
+    } else {
+        // Lenient output mode (accept loose jq compact/join style output)
+        let output = args.output(stdout)?;
+        if args.in_place && args.file.is_some() {
+            let f = args.file.unwrap(); // required
+            std::fs::write(f, output + "\n")?;
+        } else {
+            // write result to stdout ignoring SIGPIPE errors
+            // https://github.com/rust-lang/rust/issues/46016
+            let _ = writeln!(std::io::stdout(), "{output}");
+        }
     }
     Ok(())
 }
@@ -319,11 +393,11 @@ mod test {
         println!("have stdin? {}", !std::io::stdin().is_terminal());
         let data = args.read_input().unwrap();
         println!("debug args: {:?}", args);
-        let res = args.shellout(data.clone()).unwrap();
+        let res = args.shellout(data.clone(), &args.jq_args()).unwrap();
         let out = args.output(res)?;
         assert_eq!(out, "{\"name\":\"controller\"}");
         args.output = Output::Yaml;
-        let res2 = args.shellout(data)?;
+        let res2 = args.shellout(data, &args.jq_args())?;
         let out2 = args.output(res2)?;
         assert_eq!(out2, "name: controller");
         Ok(())
