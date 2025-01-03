@@ -149,7 +149,7 @@ impl Args {
     }
     fn jq_split_args(&self) -> Option<Vec<String>> {
         let split_by = &self.split.as_ref()?;
-        let mut args = vec![];
+        let mut args = vec!["-r".into()]; // we expect single unquoted keys
         args.push(split_by.to_string());
         Some(args)
     }
@@ -359,6 +359,7 @@ impl Args {
     }
     // Convert stdout into one of the Output formats verbatim as multidoc strings
     // NB: not actually needed atm
+    #[allow(unused)] // refactor later maybe
     fn output_matched(&self, stdout: Vec<u8>) -> Result<Vec<String>> {
         let docs = serde_json::Deserializer::from_slice(&stdout)
             .into_iter::<serde_json::Value>()
@@ -413,9 +414,10 @@ fn main() -> Result<()> {
             let stdout = args.shellout(&data, &jq_args)?;
             let doc = args.output(stdout)?;
             // debug:
-            //let firstlines = unsafe { doc.get_unchecked(0..200) };
-            println!("would write to {key}:\n {doc}");
-            // TODO: we need to write each output entry to a file
+            let path = std::path::Path::new(".").join(key);
+            debug!("Writing {}", path.display());
+            let mut f = std::fs::File::create(path)?;
+            f.write_all(doc.as_bytes())?;
         }
     } else {
         // normal, single pass mode on blob of u8 serde_json values passed to jq
