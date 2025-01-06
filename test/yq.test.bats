@@ -105,3 +105,36 @@
   run lq '.[].metadata.labels' -y test/deploy.yaml
   echo "$output" && echo "$output" | rg -U '\- null\n- null\n- null\n- app: controller\n- app: controller'
 }
+
+@test "split-yaml-multi-to-yaml" {
+  rm -f test/split/*
+  mkdir -p test/split
+  run lq '.' --split '"test/split/" + (.metadata.name) + "_" + (.kind | ascii_downcase) + ".yaml"' ./test/deploy.yaml -y
+  [ "$status" -eq 0 ]
+  files="$(find test/split -type f | wc -l)"
+  echo $files && [[ "$files" -eq "5" ]]
+  run lq '.kind' test/split/controller_service.yaml -r
+  echo "$output" && echo "$output" | grep "Service"
+}
+
+@test "split-yaml-single-to-json" {
+  rm -f test/split/*
+  mkdir -p test/split
+  run lq '.' --split '"test/split/" + (.metadata.name) + "_" + (.kind | ascii_downcase) + ".json"' ./test/grafana.yaml
+  [ "$status" -eq 0 ]
+  files="$(find test/split -type f | wc -l)"
+  echo $files && [[ "$files" -eq "1" ]]
+  run jq '.kind' test/split/promstack-grafana_deployment.json -r
+  echo "$output" && echo "$output" | grep "Deployment"
+}
+
+@test "split-multi-json" {
+  rm -f test/split/*
+  mkdir -p test/split
+  run lq '.' --split '"test/split/" + (.foo) + ".json"' ./test/multi.json --input=json
+  [ "$status" -eq 0 ]
+  files="$(find test/split -type f | wc -l)"
+  echo $files && [[ "$files" -eq "2" ]]
+  run jq '.foo' test/split/bar.json -r
+  echo "$output" && echo "$output" | grep "bar"
+}

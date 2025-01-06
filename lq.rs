@@ -68,6 +68,27 @@ struct Args {
     #[arg(short, long, default_value = "false")]
     in_place: bool,
 
+    /// Split the output by keys and serialize into a folder
+    ///
+    /// If set, this query is executed for each document against jq
+    /// to produce a filename to store the resulting document.
+    ///
+    /// This option only produces a key for each filename. The key
+    /// is evaluated against the base document and does not take the jq query
+    /// into consideration.
+    ///
+    /// Example: --split '"./" + (.metadata.name) + "_" + (.kind | ascii_downcase) + ".yaml"'
+    #[arg(
+        short,
+        long,
+        conflicts_with = "in_place",
+        // we need to be able to parse these back into documents to be able to split them
+        conflicts_with = "raw_output",
+        conflicts_with = "compact_output",
+        conflicts_with = "join_output"
+    )]
+    split: Option<String>,
+
     /// Query to be sent to jq (see https://jqlang.github.io/jq/manual/)
     ///
     /// Default "."
@@ -126,8 +147,14 @@ impl Args {
         }
         args
     }
+    fn jq_split_args(&self) -> Option<Vec<String>> {
+        let split_by = &self.split.as_ref()?;
+        let mut args = vec!["-r".into()]; // we expect single unquoted keys
+        args.push(split_by.to_string());
+        Some(args)
+    }
 
-    fn read_yaml(&mut self) -> Result<Vec<u8>> {
+    fn read_yaml_docs(&mut self) -> Result<Vec<serde_json::Value>> {
         let yaml_de = if let Some(f) = &self.file {
             if !std::path::Path::new(&f).exists() {
                 Self::try_parse_from(["cmd", "-h"])?;
@@ -156,6 +183,12 @@ impl Args {
             docs.push(json_value);
         }
         debug!("found {} documents", docs.len());
+        Ok(docs)
+    }
+
+    fn read_yaml(&mut self) -> Result<Vec<u8>> {
+        // yaml is multidoc parsed by default, so flatten when <2 docs to conform to jq interface
+        let docs = self.read_yaml_docs()?;
         // if there is 1 or 0 documents, do not return as nested documents
         let ser = match docs.as_slice() {
             [x] => serde_json::to_vec(x)?,
@@ -165,7 +198,7 @@ impl Args {
         Ok(ser)
     }
 
-    fn read_toml(&mut self) -> Result<Vec<u8>> {
+    fn read_toml(&mut self) -> Result<serde_json::Value> {
         use toml::Table;
         let mut buf = String::new();
         let toml_str = if let Some(f) = &self.file {
@@ -184,10 +217,18 @@ impl Args {
         };
         let doc: Table = toml_str.parse()?;
         let doc_as: serde_json::Value = doc.try_into()?;
-        Ok(serde_json::to_vec(&doc_as)?)
+        Ok(doc_as)
     }
 
-    fn read_json(&mut self) -> Result<Vec<u8>> {
+    fn read_toml_docs(&mut self) -> Result<Vec<serde_json::Value>> {
+        let toml = self.read_toml()?;
+        // TODO: need toml crate to support multidoc +++ or something
+        // see https://github.com/toml-lang/toml/issues/511
+        // see https://github.com/toml-lang/toml/issues/583
+        Ok(vec![toml]) // assume single document for now
+    }
+
+    fn read_json(&mut self) -> Result<serde_json::Value> {
         let json_value: serde_json::Value = if let Some(f) = &self.file {
             if !std::path::Path::new(&f).exists() {
                 Self::try_parse_from(["cmd", "-h"])?;
@@ -202,26 +243,45 @@ impl Args {
             Self::try_parse_from(["cmd", "-h"])?;
             std::process::exit(2);
         };
-        Ok(serde_json::to_vec(&json_value)?)
+        Ok(json_value)
+    }
+
+    // multidoc equivalent reader interface for json
+    fn read_json_docs(&mut self) -> Result<Vec<serde_json::Value>> {
+        let json = self.read_json()?;
+        // outermost is array? equivalent to multidoc
+        if let serde_json::Value::Array(ary) = json {
+            return Ok(ary);
+        }
+        // otherwise, it's 1 doc
+        Ok(vec![json])
     }
 
     fn read_input(&mut self) -> Result<Vec<u8>> {
         let ser = match self.input {
             Input::Yaml => self.read_yaml()?,
-            Input::Toml => self.read_toml()?,
-            Input::Json => self.read_json()?,
+            Input::Toml => serde_json::to_vec(&self.read_toml()?)?,
+            Input::Json => serde_json::to_vec(&self.read_json()?)?,
         };
         debug!("input decoded as json: {}", String::from_utf8_lossy(&ser));
         Ok(ser)
     }
+    fn read_input_multidoc(&mut self) -> Result<Vec<serde_json::Value>> {
+        let ser = match self.input {
+            Input::Yaml => self.read_yaml_docs()?,
+            Input::Toml => self.read_toml_docs()?,
+            Input::Json => self.read_json_docs()?,
+        };
+        //debug!("input decoded as json: {}", String::from_utf8_lossy(&ser));
+        Ok(ser)
+    }
 
     /// Pass json encoded bytes to jq with arguments for jq
-    fn shellout(&self, input: Vec<u8>) -> Result<Vec<u8>> {
-        let args = self.jq_args();
+    fn shellout(&self, input: &[u8], args: &[String]) -> Result<Vec<u8>> {
         debug!("jq args: {:?}", &args);
         // shellout jq with given args
         let mut child = Command::new("jq")
-            .args(&args)
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -239,7 +299,7 @@ impl Args {
         Ok(output.stdout)
     }
 
-    // print output either as yaml or json (as per jq output)
+    // Convert stdout into one of the Output formats verbatim as a single string
     fn output(&self, stdout: Vec<u8>) -> Result<String> {
         match self.output {
             // Only jq output is guaranteed to succeed because it's not parsed as a format
@@ -269,6 +329,28 @@ impl Args {
             }
         }
     }
+    // Convert stdout into one of the Output formats verbatim as multidoc strings
+    // NB: not actually needed atm
+    #[allow(unused)] // refactor later maybe
+    fn output_matched(&self, stdout: Vec<u8>) -> Result<Vec<String>> {
+        let docs = serde_json::Deserializer::from_slice(&stdout)
+            .into_iter::<serde_json::Value>()
+            .flatten()
+            .collect::<Vec<_>>();
+        debug!("parsed {} documents", docs.len());
+        let mut res = vec![];
+        // All formats are strictly parsed as the requested formats
+        for x in docs.as_slice() {
+            let str_doc: String = match self.output {
+                // We even need jq output to be valid json in this case to allow multidoc to be matched up
+                Output::Jq => serde_json::to_string_pretty(&x)?,
+                Output::Yaml => serde_yaml::to_string(&x)?,
+                Output::Toml => toml::to_string(&x)?,
+            };
+            res.push(str_doc.trim_end().to_string());
+        }
+        Ok(res)
+    }
 }
 
 fn init_env_tracing_stderr() -> Result<()> {
@@ -289,16 +371,40 @@ fn main() -> Result<()> {
         args.output = Output::Toml
     }
     debug!("args: {:?}", args);
-    let input = args.read_input()?;
-    let stdout = args.shellout(input)?;
-    let output = args.output(stdout)?;
-    if args.in_place && args.file.is_some() {
-        let f = args.file.unwrap(); // required
-        std::fs::write(f, output + "\n")?;
+    let jq_args = args.jq_args();
+    if let Some(split_args) = &args.jq_split_args() {
+        // File splitting mode. Requiring precise multidoc parsing and evaluation
+        let inputs = args.read_input_multidoc()?;
+        // Evaluate each document with the split expression against jq
+        // Later on, we match up the array of filenames with the corresponding output
+        for json_doc in inputs {
+            let data = serde_json::to_vec(&json_doc)?;
+            let splitout = args.shellout(&data, split_args)?;
+            let key = String::from_utf8_lossy(&splitout).trim_end().to_string();
+            // TODO: assert no linebreaks in keysplit - it should be used for a path construction
+
+            let stdout = args.shellout(&data, &jq_args)?;
+            let doc = args.output(stdout)?;
+            // debug:
+            let path = std::path::Path::new(".").join(key);
+            debug!("Writing {}", path.display());
+            let mut f = std::fs::File::create(path)?;
+            f.write_all(doc.as_bytes())?;
+        }
     } else {
-        // write result to stdout ignoring SIGPIPE errors
-        // https://github.com/rust-lang/rust/issues/46016
-        let _ = writeln!(std::io::stdout(), "{output}");
+        // normal, single pass mode on blob of u8 serde_json values passed to jq
+        let input = args.read_input()?;
+        let stdout = args.shellout(&input, &jq_args)?;
+        // Lenient output mode (accept loose jq compact/join style output)
+        let output = args.output(stdout)?;
+        if args.in_place && args.file.is_some() {
+            let f = args.file.unwrap(); // required
+            std::fs::write(f, output + "\n")?;
+        } else {
+            // write result to stdout ignoring SIGPIPE errors
+            // https://github.com/rust-lang/rust/issues/46016
+            let _ = writeln!(std::io::stdout(), "{output}");
+        }
     }
     Ok(())
 }
@@ -319,11 +425,11 @@ mod test {
         println!("have stdin? {}", !std::io::stdin().is_terminal());
         let data = args.read_input().unwrap();
         println!("debug args: {:?}", args);
-        let res = args.shellout(data.clone()).unwrap();
+        let res = args.shellout(&data, &args.jq_args()).unwrap();
         let out = args.output(res)?;
         assert_eq!(out, "{\"name\":\"controller\"}");
         args.output = Output::Yaml;
-        let res2 = args.shellout(data)?;
+        let res2 = args.shellout(&data, &args.jq_args())?;
         let out2 = args.output(res2)?;
         assert_eq!(out2, "name: controller");
         Ok(())
