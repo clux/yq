@@ -127,3 +127,14 @@
   run jq '.kind' test/split/promstack-grafana_deployment.json -r
   echo "$output" && echo "$output" | grep "Deployment"
 }
+
+@test "split-multi-json" {
+  rm -f test/split/*
+  mkdir -p test/split
+  run lq '.' --split '"test/split/" + (.foo) + ".json"' ./test/multi.json --input=json
+  [ "$status" -eq 0 ]
+  files="$(find test/split -type f | wc -l)"
+  echo $files && [[ "$files" -eq "2" ]]
+  run jq '.foo' test/split/bar.json -r
+  echo "$output" && echo "$output" | grep "bar"
+}

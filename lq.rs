@@ -243,7 +243,7 @@ impl Args {
         Ok(vec![doc_as]) // assume single document for now
     }
 
-    fn read_json(&mut self) -> Result<Vec<u8>> {
+    fn read_json(&mut self) -> Result<serde_json::Value> {
         let json_value: serde_json::Value = if let Some(f) = &self.file {
             if !std::path::Path::new(&f).exists() {
                 Self::try_parse_from(["cmd", "-h"])?;
@@ -258,38 +258,25 @@ impl Args {
             Self::try_parse_from(["cmd", "-h"])?;
             std::process::exit(2);
         };
-        Ok(serde_json::to_vec(&json_value)?)
+        Ok(json_value)
     }
 
+    // multidoc equivalent reader interface for json
     fn read_json_docs(&mut self) -> Result<Vec<serde_json::Value>> {
-        let deser = if let Some(f) = &self.file {
-            if !std::path::Path::new(&f).exists() {
-                Self::try_parse_from(["cmd", "-h"])?;
-                std::process::exit(2);
-            }
-            let file = std::fs::File::open(f)?;
-            serde_json::Deserializer::from_reader(BufReader::new(file))
-                .into_iter::<serde_json::Value>()
-                .flatten()
-                .collect()
-        } else if !stdin().is_terminal() && !cfg!(test) {
-            debug!("reading from stdin");
-            serde_json::Deserializer::from_reader(stdin())
-                .into_iter::<serde_json::Value>()
-                .flatten()
-                .collect()
-        } else {
-            Self::try_parse_from(["cmd", "-h"])?;
-            std::process::exit(2);
-        };
-        Ok(deser)
+        let json = self.read_json()?;
+        // outermost is array? equivalent to multidoc
+        if let serde_json::Value::Array(ary) = json {
+            return Ok(ary);
+        }
+        // otherwise, it's 1 doc
+        Ok(vec![json])
     }
 
     fn read_input(&mut self) -> Result<Vec<u8>> {
         let ser = match self.input {
             Input::Yaml => self.read_yaml()?,
             Input::Toml => self.read_toml()?,
-            Input::Json => self.read_json()?,
+            Input::Json => serde_json::to_vec(&self.read_json()?)?,
         };
         debug!("input decoded as json: {}", String::from_utf8_lossy(&ser));
         Ok(ser)
@@ -460,6 +447,11 @@ mod test {
         let res2 = args.shellout(&data, &args.jq_args())?;
         let out2 = args.output(res2)?;
         assert_eq!(out2, "name: controller");
+        Ok(())
+    }
+
+    #[test]
+    fn multidoc_interface() -> Result<()> {
         Ok(())
     }
 }
