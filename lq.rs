@@ -434,9 +434,4 @@ mod test {
         assert_eq!(out2, "name: controller");
         Ok(())
     }
-
-    #[test]
-    fn multidoc_interface() -> Result<()> {
-        Ok(())
-    }
 }
