@@ -187,6 +187,7 @@ impl Args {
     }
 
     fn read_yaml(&mut self) -> Result<Vec<u8>> {
+        // yaml is multidoc parsed by default, so flatten when <2 docs to conform to jq interface
         let docs = self.read_yaml_docs()?;
         // if there is 1 or 0 documents, do not return as nested documents
         let ser = match docs.as_slice() {
@@ -197,7 +198,7 @@ impl Args {
         Ok(ser)
     }
 
-    fn read_toml(&mut self) -> Result<Vec<u8>> {
+    fn read_toml(&mut self) -> Result<serde_json::Value> {
         use toml::Table;
         let mut buf = String::new();
         let toml_str = if let Some(f) = &self.file {
@@ -216,31 +217,15 @@ impl Args {
         };
         let doc: Table = toml_str.parse()?;
         let doc_as: serde_json::Value = doc.try_into()?;
-        Ok(serde_json::to_vec(&doc_as)?)
+        Ok(doc_as)
     }
 
     fn read_toml_docs(&mut self) -> Result<Vec<serde_json::Value>> {
-        use toml::Table;
-        let mut buf = String::new();
-        let toml_str = if let Some(f) = &self.file {
-            if !std::path::Path::new(&f).exists() {
-                Self::try_parse_from(["cmd", "-h"])?;
-                std::process::exit(2);
-            }
-            std::fs::read_to_string(f)?
-        } else if !stdin().is_terminal() && !cfg!(test) {
-            debug!("reading from stdin");
-            stdin().read_to_string(&mut buf)?;
-            buf
-        } else {
-            Self::try_parse_from(["cmd", "-h"])?;
-            std::process::exit(2);
-        };
-        let doc: Table = toml_str.parse()?;
-        let doc_as: serde_json::Value = doc.try_into()?;
-        // TODO: see if toml crate supports multidoc +++
-        // test https://github.com/toml-lang/toml/issues/511
-        Ok(vec![doc_as]) // assume single document for now
+        let toml = self.read_toml()?;
+        // TODO: need toml crate to support multidoc +++ or something
+        // see https://github.com/toml-lang/toml/issues/511
+        // see https://github.com/toml-lang/toml/issues/583
+        Ok(vec![toml]) // assume single document for now
     }
 
     fn read_json(&mut self) -> Result<serde_json::Value> {
@@ -275,7 +260,7 @@ impl Args {
     fn read_input(&mut self) -> Result<Vec<u8>> {
         let ser = match self.input {
             Input::Yaml => self.read_yaml()?,
-            Input::Toml => self.read_toml()?,
+            Input::Toml => serde_json::to_vec(&self.read_toml()?)?,
             Input::Json => serde_json::to_vec(&self.read_json()?)?,
         };
         debug!("input decoded as json: {}", String::from_utf8_lossy(&ser));

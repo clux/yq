@@ -1,0 +1,10 @@
++++
+[[Document]]
+index = "1"
+foo = "some-key"
+note = "multidoc-not-working-for-toml-not-part-of-spec"
++++
+[[Document]]
+index = "2"
+bar = "some-other-key"
+note = "https://github.com/toml-lang/toml/issues/583"
