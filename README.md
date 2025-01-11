@@ -48,6 +48,7 @@ This should be compatible with `python-yq`, but it has some differences with the
 ### Features
 
 - reads __multidoc yaml__ input, handles [yaml merge keys](https://yaml.org/type/merge.html) (expanding tags)
+- splits __multidoc__ input by keys/fns into multiple files
 - reads from __stdin xor file__ (file if last arg is a file)
 - output conversion shortcuts: `-y` (YAML) or `-t` (TOML)
 - drop-in replacement to [python-yq](https://kislyuk.github.io/yq/) (with `alias yq=lq`)
